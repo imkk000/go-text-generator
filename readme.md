@@ -10,6 +10,8 @@ $ go run main.go --help
     input result type ("text", "json", "bytes", "hex", "base64") (default "text")
 -length int
     input password length (default 128)
+-batch int
+    input batch size (default 1) 
 ```
 
 # TODO
@@ -17,4 +19,4 @@ $ go run main.go --help
 - [x] Generate with length (default: 128)
 - [x] Generate with result format (default: text)
 - [x] Prevent nearly duplicate
-- [ ] Add unit test
+- [x] Add unit test
