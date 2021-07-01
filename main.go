@@ -14,11 +14,6 @@ import (
 )
 
 const (
-	alpha = iota
-	number
-)
-
-const (
 	alphaNumSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789"
 )
 
@@ -30,20 +25,12 @@ func main() {
 	flag.IntVar(&batchSize, "batch", 1, "input batch size")
 	flag.Parse()
 
-	var result = make(chan []byte, length)
-	defer close(result)
-	go func() {
-		for r := range result {
-			fmt.Printf("%v\n", display(format, r))
-		}
-	}()
-
 	var wg sync.WaitGroup
 	for i := 0; i < batchSize; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result <-generateBytes(length)
+			fmt.Printf("%v\n", display(format, generateBytes(length)))
 		}()
 	}
 	wg.Wait()

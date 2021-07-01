@@ -9,7 +9,7 @@ import (
 func Test_generateChar(t *testing.T) {
 	// arrange
 	// act
-	actualChar := generateChar(0)
+	actualChar := generateChar()
 
 	// assert
 	if actualChar == 0 {
