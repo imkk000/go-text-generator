@@ -6,17 +6,10 @@ Text Generator
 ```shell
 $ go run main.go --help
 
--format string
-    input result type ("text", "json", "bytes", "hex", "base64") (default "text")
--length int
-    input password length (default 128)
 -batch int
-    input batch size (default 1) 
+    input batch size (1-10000) (default 1)
+-length int
+    input each password length (1-1000) (default 128)
+-selector string
+    input custom rune selector (default "\\w+")
 ```
-
-# TODO
-
-- [x] Generate with length (default: 128)
-- [x] Generate with result format (default: text)
-- [x] Prevent nearly duplicate
-- [x] Add unit test
