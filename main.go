@@ -1,95 +1,94 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
+	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	alphaNumSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789"
+	RuneSets            = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+=!-[]\\/()"
+	DefaultRuneSelector = `\w+`
 )
 
 func main() {
-	var length, batchSize int
-	var format string
-	flag.IntVar(&length, "length", 128, "input password length")
-	flag.StringVar(&format, "format", "text", `input result type ("text", "json", "bytes", "hex", "base64")`)
-	flag.IntVar(&batchSize, "batch", 1, "input batch size")
+	var runeSelector string
+	var pwdLen, batchSize int
+	flag.StringVar(&runeSelector, "selector", DefaultRuneSelector, "input custom rune selector")
+	flag.IntVar(&pwdLen, "length", 128, "input each password length (1-1000)")
+	flag.IntVar(&batchSize, "batch", 1, "input batch size (1-10000)")
 	flag.Parse()
 
-	var wg sync.WaitGroup
-	for i := 0; i < batchSize; i++ {
-		wg.Add(1)
+	if runeSelector == "" {
+		log.Fatal("invalid custom rune selector")
+	}
+	if pwdLen <= 0 || pwdLen > 1000 {
+		log.Fatal("invalid password length")
+	}
+	if batchSize <= 0 || batchSize > 10000 {
+		log.Fatal("invalid batch size")
+	}
+
+	re, err := regexp.Compile(runeSelector)
+	if err != nil {
+		log.Fatalf("new regex %v", err)
+	}
+	runes := re.FindString(RuneSets)
+	if len(runes) == 0 {
+		log.Fatal("parse rune sets error")
+	}
+
+	ch := make(chan string, batchSize)
+	go generatePwd(ch, batchSize, pwdLen, []rune(runes))
+
+	for s := range ch {
+		fmt.Println(s)
+	}
+}
+
+func generatePwd(sender chan<- string, s, l int, runes []rune) {
+	defer close(sender)
+
+	mut := new(sync.Mutex)
+	wgOuter := new(sync.WaitGroup)
+	wgOuter.Add(s)
+	for s > 0 {
+		s--
+
 		go func() {
-			defer wg.Done()
-			fmt.Printf("%v\n", display(format, generateBytes(length)))
+			defer wgOuter.Done()
+
+			wgInner := new(sync.WaitGroup)
+			wgInner.Add(l)
+			var b strings.Builder
+			for i := 0; i < l; i++ {
+				go func() {
+					defer wgInner.Done()
+
+					src := rand.NewSource(seed())
+					j := src.Int63() % int64(len(runes))
+
+					mut.Lock()
+					b.WriteRune(runes[j])
+					mut.Unlock()
+				}()
+			}
+			wgInner.Wait()
+
+			sender <- b.String()
 		}()
 	}
-	wg.Wait()
+	wgOuter.Wait()
 }
 
-func generateBytes(length int) []byte {
-	// generate password
-	var wg sync.WaitGroup
-	var result = make([]byte, length)
-	result[0] = generateChar()
-	result[length-1] = generateChar()
-	for i := 1; i < length-1; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for result[id] == result[id-1] || result[id] == result[id+1] {
-				result[id] = generateChar()
-			}
-		}(i)
-	}
-	wg.Wait()
-	return result
-}
-
-func generateSeed() int64 {
+func seed() int64 {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	return time.Now().UnixNano() + int64(m.Alloc) + int64(m.Frees)
-}
-
-func generateChar() uint8 {
-	// prepare seed
-	seed := generateSeed()
-	s := rand.NewSource(seed)
-	r := rand.New(s)
-
-	// select char
-	selected := r.Intn(len(alphaNumSet))
-	return alphaNumSet[selected]
-}
-
-func display(format string, result []byte) (display interface{}) {
-	switch format {
-	case "text":
-		return string(result)
-	case "hex":
-		return hex.EncodeToString(result)
-	case "base64":
-		return base64.StdEncoding.EncodeToString(result)
-	case "json":
-		buff, _ := json.Marshal(
-			map[string]interface{}{
-				"length": len(result),
-				"result": string(result),
-			})
-		return string(buff)
-	case "bytes":
-		return result
-	default:
-		return errors.New("unknown result format")
-	}
 }
