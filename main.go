@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	RuneSets            = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+=!-[]\\/()"
-	DefaultRuneSelector = `\w+`
+	RuneSets            = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	DefaultRuneSelector = `[\w]+`
 )
 
 func main() {
@@ -35,56 +35,60 @@ func main() {
 		log.Fatal("invalid batch size")
 	}
 
-	re, err := regexp.Compile(runeSelector)
+	regex, err := regexp.Compile(runeSelector)
 	if err != nil {
 		log.Fatalf("new regex %v", err)
 	}
-	runes := re.FindString(RuneSets)
+	runeSets := regex.FindAllString(RuneSets, -1)
+	if len(runeSets) == 0 {
+		log.Fatal("parse rune sets error")
+	}
+	runes := strings.Join(runeSets, "")
 	if len(runes) == 0 {
 		log.Fatal("parse rune sets error")
 	}
 
 	ch := make(chan string, batchSize)
-	go generatePwd(ch, batchSize, pwdLen, []rune(runes))
+	go generatePwd(ch, batchSize, pwdLen, []byte(runes))
 
 	for s := range ch {
 		fmt.Println(s)
 	}
 }
 
-func generatePwd(sender chan<- string, s, l int, runes []rune) {
+func generatePwd(sender chan<- string, batchSize, pwdLen int, runes []byte) {
 	defer close(sender)
 
-	mut := new(sync.Mutex)
+	runeLen := len(runes)
+
 	wgOuter := new(sync.WaitGroup)
-	wgOuter.Add(s)
-	for s > 0 {
-		s--
+	wgOuter.Add(batchSize)
+	for batchSize > 0 {
+		batchSize--
 
 		go func() {
 			defer wgOuter.Done()
 
-			wgInner := new(sync.WaitGroup)
-			wgInner.Add(l)
-			var b strings.Builder
-			for i := 0; i < l; i++ {
-				go func() {
-					defer wgInner.Done()
-
-					src := rand.NewSource(seed())
-					j := src.Int63() % int64(len(runes))
-
-					mut.Lock()
-					b.WriteRune(runes[j])
-					mut.Unlock()
-				}()
+			j := getIndex(0, runeLen)
+			b := make([]byte, pwdLen)
+			b[0] = runes[j]
+			for i := 1; i < pwdLen; i++ {
+				j = getIndex(j, runeLen)
+				b[i] = runes[j]
 			}
-			wgInner.Wait()
-
-			sender <- b.String()
+			sender <- string(b)
 		}()
 	}
 	wgOuter.Wait()
+}
+
+func getIndex(last, l int) int {
+	rand.Seed(seed())
+	v := rand.Intn(l)
+	if v == last {
+		return getIndex(last, l)
+	}
+	return v
 }
 
 func seed() int64 {
